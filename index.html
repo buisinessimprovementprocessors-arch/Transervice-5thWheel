@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Transervice 5th Wheel Verification</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root {
+    --amber: #F5A800;
+    --bg: #F4F4F4;
+    --panel: #FFFFFF;
+    --border: #DEDEDE;
+    --text: #1A1A1A;
+    --muted: #777777;
+    --green: #2ECC71;
+    --red: #E74C3C;
+    --header: #4A4A4A;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Barlow', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* HEADER */
+  .header { background: var(--header); position: relative; overflow: hidden; }
+  .header::before {
+    content: '';
+    position: absolute; top: -30px; right: -30px;
+    width: 160px; height: 160px;
+    background: rgba(245,168,0,0.1);
+    border-radius: 50%;
+  }
+  .header-inner { display: flex; align-items: center; gap: 14px; padding: 18px 20px; }
+  .logo-box {
+    width: 44px; height: 44px; background: var(--amber); border-radius: 8px;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .logo-box svg { width: 28px; height: 28px; }
+  .header-text h1 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 900; font-size: 26px; color: #fff; letter-spacing: 1px;
+    text-transform: uppercase; line-height: 1;
+  }
+  .header-text p { color: rgba(255,255,255,0.75); font-size: 13px; margin-top: 3px; }
+
+  .date-banner {
+    background: var(--amber); color: #1A1A1A;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 20px; font-size: 14px; font-weight: 500;
+  }
+
+  /* CHECKLIST CARD */
+  .check-card {
+    background: #2E2E2E; color: #EDEDED; margin: 16px; border-radius: 12px;
+    padding: 16px 18px; font-size: 13.5px; line-height: 1.5;
+  }
+  .check-card h2 {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 17px;
+    letter-spacing: 0.6px; text-transform: uppercase; color: var(--amber); margin-bottom: 8px;
+  }
+  .check-card ol { padding-left: 18px; }
+  .check-card li { margin-bottom: 6px; }
+  .check-card b { color: #fff; }
+
+  /* FORM */
+  .form-wrap { padding: 4px 16px 40px; max-width: 560px; margin: 0 auto; }
+  .section-label {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 16px;
+    letter-spacing: 1px; text-transform: uppercase; color: var(--muted);
+    margin: 20px 4px 10px; border-left: 4px solid var(--amber); padding-left: 8px;
+  }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 5px; }
+  .field label .req { color: var(--red); }
+  .field input, .field select {
+    width: 100%; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 13px 14px; font-size: 16px;
+    font-family: 'Barlow', sans-serif; color: var(--text); outline: none;
+  }
+  .field input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px rgba(245,168,0,0.18); }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  .id-result {
+    display: none; align-items: center; gap: 6px; margin-top: 7px;
+    font-size: 14px; font-weight: 600;
+  }
+  .id-result.ok { display: flex; color: var(--green); }
+  .id-result.bad { display: flex; color: var(--red); }
+
+  /* PHOTO TILES */
+  .photo-tile {
+    background: var(--panel); border: 1px dashed #C9C9C9; border-radius: 12px;
+    padding: 14px; margin-bottom: 12px; transition: border-color .15s;
+  }
+  .photo-tile.done { border: 1px solid var(--green); }
+  .photo-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .photo-title { font-size: 14px; font-weight: 600; }
+  .photo-title .req { color: var(--red); }
+  .photo-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .photo-btn {
+    flex-shrink: 0; background: #2E2E2E; color: #fff; border: none; border-radius: 8px;
+    padding: 10px 14px; font-family: 'Barlow', sans-serif; font-weight: 600; font-size: 13px;
+    display: flex; align-items: center; gap: 6px; cursor: pointer;
+  }
+  .photo-tile.done .photo-btn { background: var(--green); }
+  .thumb-wrap { display: none; margin-top: 10px; position: relative; }
+  .thumb-wrap.show { display: block; }
+  .thumb-wrap img { width: 100%; max-height: 220px; object-fit: cover; border-radius: 8px; }
+  .thumb-meta { font-size: 12px; color: var(--muted); margin-top: 5px; }
+  input[type="file"] { display: none; }
+
+  /* SUBMIT */
+  .submit-btn {
+    width: 100%; margin-top: 22px; background: var(--amber); color: #1A1A1A;
+    border: none; border-radius: 12px; padding: 16px;
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 20px;
+    letter-spacing: 1px; text-transform: uppercase; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+  }
+  .submit-btn:disabled { opacity: 0.7; }
+  .spinner {
+    width: 18px; height: 18px; border: 3px solid rgba(0,0,0,0.25);
+    border-top-color: #1A1A1A; border-radius: 50%; animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2s; } }
+
+  /* SUCCESS */
+  .success { display: none; text-align: center; padding: 60px 24px; max-width: 560px; margin: 0 auto; }
+  .success.show { display: block; }
+  .success .big { font-size: 60px; }
+  .success h2 {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 30px;
+    text-transform: uppercase; letter-spacing: 1px; margin: 12px 0 8px;
+  }
+  .success p { color: var(--muted); font-size: 15px; }
+  .again-btn {
+    margin-top: 24px; background: #2E2E2E; color: #fff; border: none; border-radius: 10px;
+    padding: 13px 22px; font-family: 'Barlow', sans-serif; font-weight: 600; font-size: 15px; cursor: pointer;
+  }
+
+  /* TOAST */
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
+    background: #1A1A1A; color: #fff; padding: 12px 20px; border-radius: 10px;
+    font-size: 14px; opacity: 0; transition: all .25s; z-index: 50; max-width: 90vw; text-align: center;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* QR FOOTER */
+  .qr-section { text-align: center; padding: 30px 16px 50px; border-top: 1px solid var(--border); margin-top: 30px; }
+  .qr-section h3 {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 16px;
+    letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: 14px;
+  }
+  #qrcode { display: inline-block; background: #fff; padding: 12px; border-radius: 12px; border: 1px solid var(--border); }
+  .qr-url { font-size: 11px; color: var(--muted); margin-top: 10px; word-break: break-all; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-inner">
+    <div class="logo-box">
+      <svg viewBox="0 0 24 24" fill="none">
+        <path d="M3 16.5V15h13v1.5H3zm14.5-6.8 3.4 2.3c.4.3.6.7.6 1.2v2.3c0 .8-.7 1.5-1.5 1.5h-1a2.5 2.5 0 0 1-5 0H9.5a2.5 2.5 0 0 1-5 0H3v-4h13V8.5c0-.6.4-1 1-1h.5c.4 0 .8.2 1 .5v1.7z" fill="#1A1A1A"/>
+        <circle cx="7" cy="17.5" r="1.4" fill="#1A1A1A"/>
+        <circle cx="17" cy="17.5" r="1.4" fill="#1A1A1A"/>
+      </svg>
+    </div>
+    <div class="header-text">
+      <h1>Transervice</h1>
+      <p>Atlanta Operations · 5th Wheel Verification</p>
+    </div>
+  </div>
+</div>
+
+<div class="date-banner">
+  <span id="today-date">Loading...</span>
+  <span><strong id="today-time">--:--</strong></span>
+</div>
+
+<div class="check-card">
+  <h2>What You Are Looking For</h2>
+  <ol>
+    <li><b>The "High Hitch" check:</b> trailer plate resting flat on the fifth wheel. Daylight between them means a false lock.</li>
+    <li><b>The jaw lock:</b> locking jaws physically closed around the shank of the kingpin.</li>
+    <li><b>The release handle:</b> release lever in the fully locked / inward position.</li>
+  </ol>
+</div>
+
+<div class="form-wrap" id="form-section">
+
+  <p class="section-label">Driver Information</p>
+
+  <div class="field">
+    <label>Find your name <span class="req">*</span></label>
+    <input type="text" id="name-search" list="roster-list" placeholder="Start typing your name..." autocomplete="off">
+    <datalist id="roster-list"></datalist>
+  </div>
+
+  <div class="field">
+    <label>Employee ID #</label>
+    <input type="number" id="emp-id" placeholder="e.g. 411166" inputmode="numeric" autocomplete="off">
+    <div class="id-result" id="id-result"><span id="id-icon">✓</span><span id="id-name"></span></div>
+  </div>
+
+  <div class="row2">
+    <div class="field">
+      <label>Date <span class="req">*</span></label>
+      <input type="date" id="ver-date">
+    </div>
+    <div class="field">
+      <label>Trailer # <span class="req">*</span></label>
+      <input type="text" id="trailer-num" placeholder="e.g. 326785" inputmode="numeric" autocomplete="off">
+    </div>
+  </div>
+
+  <div class="field">
+    <label>Tractor # <span class="req">*</span></label>
+    <input type="text" id="tractor-num" placeholder="e.g. 224012" inputmode="numeric" autocomplete="off">
+  </div>
+
+  <p class="section-label">Photos</p>
+  <div id="photo-tiles"></div>
+
+  <button class="submit-btn" id="submit-btn" onclick="submitForm()">Submit Verification</button>
+</div>
+
+<div class="success" id="success-section">
+  <div class="big">✅</div>
+  <h2>Verification Received</h2>
+  <p id="success-detail">Your 5th wheel verification and photos have been logged.</p>
+  <button class="again-btn" onclick="resetForm()">Submit Another</button>
+</div>
+
+<div class="qr-section">
+  <h3>Scan to open this form</h3>
+  <div id="qrcode"></div>
+  <p class="qr-url" id="qr-url-text"></p>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   CONFIG — paste the Power Automate HTTP trigger URL here
+   ============================================================ */
+const FLOW_URL = 'PASTE_POWER_AUTOMATE_HTTP_URL_HERE';
+
+/* Photo requirements — key becomes the SharePoint filename prefix */
+const PHOTO_FIELDS = [
+  { key: 'LockPhoto',     title: '5th Wheel Lock',            sub: 'One photo of the 5th wheel locked on the kingpin', required: true },
+  { key: 'WalkDriver',    title: 'Walkaround — Driver Side',   sub: '360 walk around for safety · Photo 1',            required: true },
+  { key: 'WalkRear',      title: 'Walkaround — Rear',          sub: 'Include the trailer number · Photo 2',            required: true },
+  { key: 'WalkPassenger', title: 'Walkaround — Passenger Side',sub: '360 walk around for safety · Photo 3',            required: true },
+  { key: 'TripSheet',     title: 'Trip Sheet',                 sub: 'Photo of today\'s trip sheet',                     required: true }
+];
+
+/* Shared roster — identical to Transervice-Callout */
+const employeeNames = {
+  411001:"Marty Mosley",411002:"Alfred Hardy",411003:"Milton Hall",411004:"Jimmy Morris",
+  411005:"Curtis Lawrence",411006:"Scott Thompson",411007:"Lionel Battle",411008:"James Harmon",
+  411009:"Kenneth Willis",411011:"Joe Robinson",411012:"Tommy Rooks",411013:"Roderick Manning",
+  411014:"Edward Sherrill",411015:"Larry Kendrick",411017:"Jasper Porter",411018:"Jim Blackburn",
+  411019:"Terry Johnson",411020:"John Tipton",411159:"Leslie Lawrence",411022:"Benjamin Tillman",
+  411023:"Terry Saunders",411024:"Jeff Grigsby",411025:"James Danny Brown",411026:"James Tinch",
+  411027:"Kristopher Carey",411030:"Dennis Morris",411154:"Kelvyn Corbett",411031:"Vincent Woods",
+  411157:"Staffon Myers",411034:"Michael Poitier",411035:"Ernestine Putnam",411161:"Wilson Reid",
+  411036:"Phillip Woodley Jr.",411037:"Albert Head",411039:"Tim Ingram",411038:"Dusko Martinovic",
+  411040:"Eddie Vasquez",411041:"Aleksandar Prodanovic",411042:"Spencer Williams",411043:"Malcolm Hall",
+  411044:"Torrey Anderson",411045:"Todd Swift",411156:"Gerald Greene",411046:"Donnie Smith",
+  411048:"Alfred Dumas",411049:"Dante Relaford",411050:"Willie Blocker",411052:"Gregory Hamilton",
+  411054:"Michael Mason",411056:"Jose Soria",411057:"Joe Law",411058:"Joseph Duffy",
+  411059:"Edward Gresham",411061:"Ytece Scales",411062:"Jerry Kendall",411060:"Dwight Gunn",
+  411064:"Richard Chambers",411065:"Jeffery Brittian",411066:"Christopher Basden",411067:"James Parr",
+  411068:"Ryan Lee",411069:"Steven Lewis",411070:"Hosel Johnson",411071:"Mario Andrews",
+  411072:"Gary Higgins",411073:"Monica McKoy",411074:"Anthony Leslie",411075:"Dennis Garner",
+  411077:"Tracy Tift",411078:"Albert Ponder",411079:"Adrienne Bryant",411163:"Robert Cureton",
+  411081:"Michael Porter",411084:"Jerry Young",411080:"Robert Couch",411155:"Bruce Reavis",
+  411087:"Michael Calhoun",411088:"Joe Cook",411089:"Darrio Parrish",411090:"Raphael Lucas",
+  411091:"Christopher Hardy",411092:"Ernest McCrary",411162:"Larry Tanksley",411093:"Thomas Leverett",
+  411094:"Timothy Simon",411095:"Randall Murphy",411096:"Robert Whitney",411097:"Mario Searcy",
+  411252:"Antonie Warner",411098:"Robert Farris",411099:"Laura Poling",411100:"Leslie Kimble",
+  411102:"David Lyons",411103:"Ralph Payton",411104:"Terrian Johnson",411106:"Mahmoud Rashad",
+  411108:"Chris Floyd",411109:"Takelia McCrimon",411110:"Carl Sweat",411111:"Mark Roebuck",
+  411112:"Darell Richson",411113:"Antwann Lewis",411114:"Rohalia Knight",411115:"Jean Louis",
+  411116:"Rontavious Patton",411117:"Terry Montgomery",411118:"Zacarra Buffington",411119:"Travon Hardy",
+  411121:"John Wesley Yates",411122:"Gene Thompson",411123:"Elom Maglo",411124:"Rodney Bembry",
+  411126:"Alexander Rhodes",411127:"Robert Brewer",411129:"Reginald Kenney",411130:"William Anderson",
+  411131:"Divid Harris",411132:"Garry White",411133:"Mackenzie Nelson",411134:"Richardson Fils",
+  411135:"Kendall Thomas",411138:"Scott Blankenship",411139:"Jason Hooks",411140:"Laracco Glaze",
+  411141:"Samuel Meeks",411142:"Kenneth Sheriff",411144:"Davon Autry",411145:"Michael Nicolozzi",
+  411274:"Donna Wildes",411146:"Reginald Smith",411149:"Joseph Robinson",411150:"Deion Coston",
+  411151:"Raven Scott",411152:"Antonio Pittman",411165:"Lonnie Gary",411166:"Bryant Dennis",
+  411167:"Alfred Hill",411168:"Ulysses Gladden",411169:"Kizzy Morris",411170:"Louis Washington",
+  411171:"Louis Jasmin",411172:"Gregory Moon",411173:"Jabriece Nicholson",411174:"Michael Demps",
+  411176:"Jonathan Holman",411177:"Brandon Gaspard",411178:"Tobious Anthony",411181:"Darrell Lee",
+  411180:"Omar Jones",411182:"Sean Buchanan",411183:"Zachary Guffie",411184:"Randall Patterson",
+  411185:"Miguel Rosales",411186:"Christain Welch",411187:"Alexander Tucker",411188:"Rasheen Holton",
+  411189:"Nicholas Todd",411190:"Andrelious Brown",411191:"Fredrick Davis",411192:"Thomas Hayes",
+  411193:"Dana Williams",411194:"Jarrod Coachman",411195:"Jamario Chambers",411196:"Roosevelt Coney",
+  411197:"Kentorius Marks",411198:"Brookston Lemay",411199:"Corey Renfroe",411200:"Bernard Todd",
+  411201:"Mike Franklin",411202:"Tyron Sanders",411203:"Leonte Williams",411207:"Eric Coverson",
+  411208:"Kamela Robinson",411209:"Leneon Johnson",411211:"Mickel Evans",411212:"Dean Ellis",
+  411213:"Clayton Moreland",411214:"Grant Giles",411215:"Jerry Williamson",411216:"Brian Tolbert",
+  411218:"William Chester",411219:"Alterick Lawrence",411222:"John Albritton",411223:"Milton Hall Jr.",
+  411224:"Guy Patterson",411225:"Ricky Roberson",411226:"Reginald Pierre",411227:"Roystan Frederick",
+  411228:"Michael White",411229:"Wilson Gist",411230:"Marshall Griffin",411232:"Obbie Mallard",
+  411233:"Demetrius Seats",411234:"Kenneth Wright",411235:"Marcus Osagie",411236:"Davron Basden",
+  411238:"Delon Roy",411239:"Delange Aupont",411240:"Duanyae Gibson",411249:"Antonio White",
+  411253:"Kousemann St. Fort",411258:"Timothy White",411259:"Terence Brown",411260:"Johnnie Mathis",
+  411261:"Cornelis Hunt",411262:"Brittany Demons",411265:"Seth Kono",411267:"Brian Smith",
+  411268:"Derek Lee",411270:"Lavonte Humphrey",411271:"David Johnson",411272:"Destany Drawn",
+  411275:"Steven Davis",411276:"Deseantus Barkley",411278:"Francisco Arroyo-Ordaz",411281:"Johnathan Welch",
+  411283:"Lenford Joshua",411285:"Kenyetta Hines",411286:"Brianna Hutchins",411287:"Michael Brooks",
+  411289:"Kirk Manhertz",411290:"Edward Gill",411294:"Carlton Tabron",411296:"Joriel Battle",
+  411297:"William Lewis",411298:"Carey Foster",411300:"David Carson",411303:"Tatyana Harris",
+  411304:"Bengela Shaw",411305:"Gregory Joachim",411307:"Billie Craft",411308:"Kim Bryant",
+  411313:"Alexis Brady",411314:"Lee Roberts",411316:"Arabia Taylor",411317:"Diane Gadison",
+  411318:"King Daniels",411319:"Chenteria Orr",411320:"Jonathan Pettigrew",411321:"Kelvin Bufford",
+  411322:"Joshua Enwright",411323:"Bryan Anthony",411325:"David Mason",411327:"Eric Stovall",
+  411328:"Dimitri Blow",411330:"Raphaiel Miles",411332:"LaTia Dozier",411333:"James Kitchen",
+  411334:"Israel Tyler",411335:"Gaysha Griffin",411336:"Dan Sanders",411337:"Avery Jones"
+};
+
+/* ---------- roster search wiring ---------- */
+const nameToId = {};
+const dl = document.getElementById('roster-list');
+Object.entries(employeeNames).forEach(([id, nm]) => {
+  nameToId[nm.toLowerCase()] = id;
+  const o = document.createElement('option');
+  o.value = nm;
+  dl.appendChild(o);
+});
+
+const nameEl = document.getElementById('name-search');
+const idEl = document.getElementById('emp-id');
+const resEl = document.getElementById('id-result');
+
+function showId(state, text) {
+  resEl.className = 'id-result ' + state;
+  document.getElementById('id-icon').textContent = state === 'ok' ? '✓' : '✕';
+  document.getElementById('id-name').textContent = text;
+}
+
+nameEl.addEventListener('input', () => {
+  const id = nameToId[nameEl.value.trim().toLowerCase()];
+  if (id) { idEl.value = id; showId('ok', 'ID ' + id + ' · ' + nameEl.value.trim()); }
+});
+
+idEl.addEventListener('input', () => {
+  const nm = employeeNames[parseInt(idEl.value)];
+  if (nm) { nameEl.value = nm; showId('ok', nm); }
+  else if (idEl.value.length >= 6) showId('bad', 'ID not found on roster');
+  else resEl.className = 'id-result';
+});
+
+/* ---------- photo tiles ---------- */
+const photoData = {};   // key -> { base64, filename, sizeKB }
+
+const tilesEl = document.getElementById('photo-tiles');
+PHOTO_FIELDS.forEach(f => {
+  const tile = document.createElement('div');
+  tile.className = 'photo-tile';
+  tile.id = 'tile-' + f.key;
+  tile.innerHTML = `
+    <div class="photo-top">
+      <div>
+        <div class="photo-title">${f.title} ${f.required ? '<span class="req">*</span>' : ''}</div>
+        <div class="photo-sub">${f.sub}</div>
+      </div>
+      <button type="button" class="photo-btn" onclick="document.getElementById('file-${f.key}').click()">
+        <span id="btn-label-${f.key}">📷 Take Photo</span>
+      </button>
+    </div>
+    <div class="thumb-wrap" id="thumb-wrap-${f.key}">
+      <img id="thumb-${f.key}" alt="${f.title} preview">
+      <div class="thumb-meta" id="meta-${f.key}"></div>
+    </div>
+    <input type="file" id="file-${f.key}" accept="image/*" capture="environment">
+  `;
+  tilesEl.appendChild(tile);
+  document.getElementById('file-' + f.key).addEventListener('change', e => handlePhoto(f.key, e));
+});
+
+/* compress via canvas: max 1600px long edge, JPEG q0.72 */
+function compressImage(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const MAX = 1600;
+      let { width, height } = img;
+      if (Math.max(width, height) > MAX) {
+        const s = MAX / Math.max(width, height);
+        width = Math.round(width * s);
+        height = Math.round(height * s);
+      }
+      const c = document.createElement('canvas');
+      c.width = width; c.height = height;
+      c.getContext('2d').drawImage(img, 0, 0, width, height);
+      URL.revokeObjectURL(url);
+      const dataUrl = c.toDataURL('image/jpeg', 0.72);
+      resolve(dataUrl);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('bad image')); };
+    img.src = url;
+  });
+}
+
+async function handlePhoto(key, e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const dataUrl = await compressImage(file);
+    const base64 = dataUrl.split(',')[1];
+    const sizeKB = Math.round(base64.length * 0.75 / 1024);
+    photoData[key] = { base64, sizeKB };
+    document.getElementById('thumb-' + key).src = dataUrl;
+    document.getElementById('thumb-wrap-' + key).classList.add('show');
+    document.getElementById('meta-' + key).textContent = sizeKB + ' KB · tap Take Photo to retake';
+    document.getElementById('tile-' + key).classList.add('done');
+    document.getElementById('btn-label-' + key).textContent = '✓ Retake';
+  } catch (err) {
+    showToast('⚠️ Could not read that photo. Please retake it.');
+  }
+}
+
+/* ---------- date banner + default date ---------- */
+function pad(n){ return String(n).padStart(2,'0'); }
+function refreshClock(){
+  const now = new Date();
+  document.getElementById('today-date').textContent =
+    now.toLocaleDateString('en-US',{weekday:'long', month:'long', day:'numeric', year:'numeric'});
+  document.getElementById('today-time').textContent = pad(now.getHours()%12||12)+':'+pad(now.getMinutes())+(now.getHours()<12?' AM':' PM');
+}
+refreshClock(); setInterval(refreshClock, 30000);
+document.getElementById('ver-date').value = new Date().toISOString().split('T')[0];
+
+/* ---------- toast ---------- */
+function showToast(msg, duration=3200){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), duration);
+}
+
+/* ---------- submit ---------- */
+async function submitForm(){
+  const btn = document.getElementById('submit-btn');
+  if (btn.disabled) return;
+
+  const empId = idEl.value.trim();
+  const name = employeeNames[parseInt(empId)] || '';
+  const date = document.getElementById('ver-date').value;
+  const trailerNum = document.getElementById('trailer-num').value.trim();
+  const tractorNum = document.getElementById('tractor-num').value.trim();
+
+  if (!name)      { showToast('⚠️ Select your name or enter a valid Employee ID'); return; }
+  if (!date)      { showToast('⚠️ Please select the date'); return; }
+  if (!trailerNum){ showToast('⚠️ Please enter the trailer number'); return; }
+  if (!tractorNum){ showToast('⚠️ Please enter the tractor number'); return; }
+  const missing = PHOTO_FIELDS.filter(f => f.required && !photoData[f.key]);
+  if (missing.length){ showToast('⚠️ Missing photo: ' + missing[0].title); return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Uploading photos...';
+
+  const payload = {
+    employeeId: parseInt(empId),
+    name: name,
+    verificationDate: date,
+    trailerNum: trailerNum,
+    tractorNum: tractorNum,
+    submittedAt: new Date().toISOString(),
+    photos: PHOTO_FIELDS.filter(f => photoData[f.key]).map(f => ({
+      field: f.key,
+      filename: date + '_' + name.replace(/[^A-Za-z0-9]/g,'') + '_' + f.key + '.jpg',
+      contentBase64: photoData[f.key].base64
+    }))
+  };
+
+  try {
+    const resp = await fetch(FLOW_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    document.getElementById('success-detail').textContent =
+      name + ' · Trailer ' + trailerNum + ' · ' + payload.photos.length + ' photos logged.';
+    document.getElementById('form-section').style.display = 'none';
+    document.getElementById('success-section').classList.add('show');
+    window.scrollTo(0,0);
+  } catch (err) {
+    showToast('❌ Submission failed. Check signal and try again.');
+    btn.disabled = false;
+    btn.innerHTML = 'Submit Verification';
+  }
+}
+
+function resetForm(){
+  nameEl.value = ''; idEl.value = '';
+  resEl.className = 'id-result';
+  document.getElementById('trailer-num').value = '';
+  document.getElementById('tractor-num').value = '';
+  document.getElementById('ver-date').value = new Date().toISOString().split('T')[0];
+  PHOTO_FIELDS.forEach(f => {
+    delete photoData[f.key];
+    document.getElementById('tile-' + f.key).classList.remove('done');
+    document.getElementById('thumb-wrap-' + f.key).classList.remove('show');
+    document.getElementById('file-' + f.key).value = '';
+    document.getElementById('btn-label-' + f.key).textContent = '📷 Take Photo';
+  });
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = false; btn.innerHTML = 'Submit Verification';
+  document.getElementById('success-section').classList.remove('show');
+  document.getElementById('form-section').style.display = 'block';
+}
+
+/* ---------- QR ---------- */
+window.addEventListener('load', () => {
+  const url = window.location.href;
+  document.getElementById('qr-url-text').textContent = url;
+  new QRCode(document.getElementById('qrcode'), {
+    text: url, width: 160, height: 160,
+    colorDark: '#000000', colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.M
+  });
+});
+</script>
+</body>
+</html>
