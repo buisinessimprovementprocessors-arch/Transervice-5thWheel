@@ -489,9 +489,10 @@ async function submitForm(){
   };
 
   try {
+    // No Content-Type header: keeps this a 'simple request' so the browser
+    // skips the CORS preflight that the powerplatform.com URL rejects.
     const resp = await fetch(FLOW_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
