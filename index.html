@@ -161,7 +161,14 @@
     font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 16px;
     letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: 14px;
   }
-  #qrcode { display: inline-block; background: #fff; padding: 12px; border-radius: 12px; border: 1px solid var(--border); }
+  #qrcode { display: inline-block; background: #fff; padding: 12px; border-radius: 12px; border: 1px solid var(--border); position: relative; }
+  .qr-logo {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 42px; height: 42px; background: var(--amber); border-radius: 10px;
+    border: 3px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+    display: flex; align-items: center; justify-content: center; pointer-events: none;
+  }
+  .qr-logo svg { width: 30px; height: 30px; }
   .qr-url { font-size: 11px; color: var(--muted); margin-top: 10px; word-break: break-all; }
 </style>
 </head>
@@ -244,7 +251,16 @@
 
 <div class="qr-section">
   <h3>Scan to open this form</h3>
-  <div id="qrcode"></div>
+  <div id="qrcode"><div class="qr-logo">
+    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="12" cy="11" r="8.6" fill="#1A1A1A"/>
+      <path d="M12 11 L8.4 20.6 L15.6 20.6 Z" fill="#F5A800"/>
+      <circle cx="12" cy="11" r="2" fill="#F5A800"/>
+      <circle cx="12" cy="11" r="0.9" fill="#1A1A1A"/>
+      <circle cx="6.4" cy="8" r="0.9" fill="#F5A800"/>
+      <circle cx="17.6" cy="8" r="0.9" fill="#F5A800"/>
+    </svg>
+  </div></div>
   <p class="qr-url" id="qr-url-text"></p>
 </div>
 
@@ -534,7 +550,7 @@ window.addEventListener('load', () => {
   new QRCode(document.getElementById('qrcode'), {
     text: url, width: 160, height: 160,
     colorDark: '#000000', colorLight: '#ffffff',
-    correctLevel: QRCode.CorrectLevel.M
+    correctLevel: QRCode.CorrectLevel.H
   });
 });
 </script>
