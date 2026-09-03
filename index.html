@@ -16,6 +16,7 @@
     --muted: #777777;
     --green: #2ECC71;
     --red: #E74C3C;
+    --blue: #3498DB;
     --header: #4A4A4A;
   }
 
@@ -95,12 +96,21 @@
   .id-result.ok { display: flex; color: var(--green); }
   .id-result.bad { display: flex; color: var(--red); }
 
+  /* GATE NOTICE */
+  .gate-notice {
+    background: #FFF6E0; border: 1px solid var(--amber); border-radius: 10px;
+    padding: 12px 14px; font-size: 13.5px; color: #7A5A00; margin-bottom: 12px;
+  }
+  .gate-notice.hide { display: none; }
+
   /* PHOTO TILES */
+  .photo-area.locked { opacity: 0.45; pointer-events: none; }
   .photo-tile {
     background: var(--panel); border: 1px dashed #C9C9C9; border-radius: 12px;
     padding: 14px; margin-bottom: 12px; transition: border-color .15s;
   }
   .photo-tile.done { border: 1px solid var(--green); }
+  .photo-tile.failed { border: 1px solid var(--red); }
   .photo-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .photo-title { font-size: 14px; font-weight: 600; }
   .photo-title .req { color: var(--red); }
@@ -115,6 +125,22 @@
   .thumb-wrap.show { display: block; }
   .thumb-wrap img { width: 100%; max-height: 220px; object-fit: cover; border-radius: 8px; }
   .thumb-meta { font-size: 12px; color: var(--muted); margin-top: 5px; }
+
+  .up-status { display: flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; margin-top: 6px; }
+  .up-status.idle    { color: var(--muted); }
+  .up-status.working { color: var(--blue); }
+  .up-status.done    { color: var(--green); }
+  .up-status.failed  { color: var(--red); }
+  .mini-spin {
+    width: 12px; height: 12px; border: 2px solid rgba(52,152,219,0.3);
+    border-top-color: var(--blue); border-radius: 50%; animation: spin .8s linear infinite;
+    flex-shrink: 0;
+  }
+  .retry-btn {
+    background: var(--red); color: #fff; border: none; border-radius: 6px;
+    padding: 5px 10px; font-family: 'Barlow', sans-serif; font-weight: 600; font-size: 12px;
+    cursor: pointer; margin-left: 4px;
+  }
   input[type="file"] { display: none; }
 
   /* SUBMIT */
@@ -125,13 +151,15 @@
     letter-spacing: 1px; text-transform: uppercase; cursor: pointer;
     display: flex; align-items: center; justify-content: center; gap: 10px;
   }
-  .submit-btn:disabled { opacity: 0.7; }
+  .submit-btn:disabled { opacity: 0.55; }
   .spinner {
     width: 18px; height: 18px; border: 3px solid rgba(0,0,0,0.25);
     border-top-color: #1A1A1A; border-radius: 50%; animation: spin .8s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
-  @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2s; } }
+  @media (prefers-reduced-motion: reduce) { .spinner, .mini-spin { animation-duration: 2s; } }
+
+  .upload-summary { text-align: center; font-size: 13px; color: var(--muted); margin-top: 10px; }
 
   /* SUCCESS */
   .success { display: none; text-align: center; padding: 60px 24px; max-width: 560px; margin: 0 auto; }
@@ -154,6 +182,14 @@
     font-size: 14px; opacity: 0; transition: all .25s; z-index: 50; max-width: 90vw; text-align: center;
   }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* RESUME BANNER */
+  .resume-banner {
+    display: none; background: #E8F4FD; border: 1px solid var(--blue); border-radius: 10px;
+    padding: 12px 14px; margin: 0 16px 4px; font-size: 13.5px; color: #14618F;
+    max-width: 560px; margin-left: auto; margin-right: auto;
+  }
+  .resume-banner.show { display: block; }
 
   /* QR FOOTER */
   .qr-section { text-align: center; padding: 30px 16px 50px; border-top: 1px solid var(--border); margin-top: 30px; }
@@ -194,6 +230,8 @@
   <span id="today-date">Loading...</span>
   <span><strong id="today-time">--:--</strong></span>
 </div>
+
+<div class="resume-banner" id="resume-banner"></div>
 
 <div class="check-card">
   <h2>What You Are Looking For</h2>
@@ -237,9 +275,18 @@
   </div>
 
   <p class="section-label">Photos</p>
-  <div id="photo-tiles"></div>
+
+  <div class="gate-notice" id="gate-notice">
+    Fill in your name, date, trailer number and tractor number above to unlock the photos.
+    Each photo uploads on its own as soon as you take it, so you are not waiting at the end.
+  </div>
+
+  <div class="photo-area locked" id="photo-area">
+    <div id="photo-tiles"></div>
+  </div>
 
   <button class="submit-btn" id="submit-btn" onclick="submitForm()">Submit Verification</button>
+  <div class="upload-summary" id="upload-summary"></div>
 </div>
 
 <div class="success" id="success-section">
@@ -268,9 +315,20 @@
 
 <script>
 /* ============================================================
-   CONFIG — paste the Power Automate HTTP trigger URL here
+   CONFIG
+   FLOW_URL       = existing "5th Wheel" flow (now log-only)
+   PHOTO_FLOW_URL = new "5th Wheel Photo" flow (one photo per call)
    ============================================================ */
 const FLOW_URL = 'https://default3736ba2ab66047748ed80d95976bac.33.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/05/workflows/49a08ddbbf014270b792eda4051b8742/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=JiDMU2Rwr9ZFqQUikWlOwsFDoBX-KTjap8nBQKQeZ5M';
+
+const PHOTO_FLOW_URL = 'https://default3736ba2ab66047748ed80d95976bac.33.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/16/workflows/72e2943ce35f470dbd1682882fa5c943/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=yjRNkW46vg-lrr1mYHTZYadRX3o2ygNDBM9RHFDsI6k';
+
+/* Compression — 1280px long edge, JPEG q0.60.
+   Measured: takes a ~918 KB photo to ~500 KB, plate/trailer numbers stay legible. */
+const MAX_EDGE = 1280;
+const JPEG_QUALITY = 0.60;
+
+const STORAGE_KEY = 'fw_draft_v2';
 
 /* Photo requirements — key becomes the SharePoint filename prefix */
 const PHOTO_FIELDS = [
@@ -348,6 +406,14 @@ const employeeNames = {
   411334:"Israel Tyler",411335:"Gaysha Griffin",411336:"Dan Sanders",411337:"Avery Jones"
 };
 
+/* ---------- state ---------- */
+/* photoData[key] = { base64, sizeKB, filename, status } 
+   status: 'idle' | 'working' | 'done' | 'failed'
+   base64 is held in memory only — never written to localStorage (too large). */
+const photoData = {};
+let submissionFolder = null;   // set once driver info is complete
+let submitting = false;
+
 /* ---------- roster search wiring ---------- */
 const nameToId = {};
 const dl = document.getElementById('roster-list');
@@ -361,6 +427,9 @@ Object.entries(employeeNames).forEach(([id, nm]) => {
 const nameEl = document.getElementById('name-search');
 const idEl = document.getElementById('emp-id');
 const resEl = document.getElementById('id-result');
+const dateEl = document.getElementById('ver-date');
+const trailerEl = document.getElementById('trailer-num');
+const tractorEl = document.getElementById('tractor-num');
 
 function showId(state, text) {
   resEl.className = 'id-result ' + state;
@@ -371,6 +440,7 @@ function showId(state, text) {
 nameEl.addEventListener('input', () => {
   const id = nameToId[nameEl.value.trim().toLowerCase()];
   if (id) { idEl.value = id; showId('ok', 'ID ' + id + ' · ' + nameEl.value.trim()); }
+  onDriverInfoChange();
 });
 
 idEl.addEventListener('input', () => {
@@ -378,11 +448,46 @@ idEl.addEventListener('input', () => {
   if (nm) { nameEl.value = nm; showId('ok', nm); }
   else if (idEl.value.length >= 6) showId('bad', 'ID not found on roster');
   else resEl.className = 'id-result';
+  onDriverInfoChange();
 });
 
-/* ---------- photo tiles ---------- */
-const photoData = {};   // key -> { base64, filename, sizeKB }
+[dateEl, trailerEl, tractorEl].forEach(el => el.addEventListener('input', onDriverInfoChange));
 
+/* ---------- driver info gate ---------- */
+function driverInfoComplete() {
+  const name = employeeNames[parseInt(idEl.value)] || '';
+  return !!(name && dateEl.value && trailerEl.value.trim() && tractorEl.value.trim());
+}
+
+function pad2(n){ return String(n).padStart(2,'0'); }
+
+/* Matches the original Power Automate FolderName expression exactly:
+   concat(verificationDate, '_', replace(name, ' ', ''), '_', formatDateTime(utcNow(),'HHmmss')) */
+function makeFolderName(date, name) {
+  const d = new Date();
+  const hhmmss = pad2(d.getUTCHours()) + pad2(d.getUTCMinutes()) + pad2(d.getUTCSeconds());
+  return date + '_' + name.split(' ').join('') + '_' + hhmmss;
+}
+
+function onDriverInfoChange() {
+  const area = document.getElementById('photo-area');
+  const notice = document.getElementById('gate-notice');
+  if (driverInfoComplete()) {
+    if (!submissionFolder) {
+      const name = employeeNames[parseInt(idEl.value)] || '';
+      submissionFolder = makeFolderName(dateEl.value, name);
+    }
+    area.classList.remove('locked');
+    notice.classList.add('hide');
+  } else {
+    area.classList.add('locked');
+    notice.classList.remove('hide');
+  }
+  saveState();
+  refreshSubmitState();
+}
+
+/* ---------- photo tiles ---------- */
 const tilesEl = document.getElementById('photo-tiles');
 PHOTO_FIELDS.forEach(f => {
   const tile = document.createElement('div');
@@ -402,22 +507,22 @@ PHOTO_FIELDS.forEach(f => {
       <img id="thumb-${f.key}" alt="${f.title} preview">
       <div class="thumb-meta" id="meta-${f.key}"></div>
     </div>
+    <div class="up-status idle" id="up-${f.key}"></div>
     <input type="file" id="file-${f.key}" accept="image/*" capture="environment">
   `;
   tilesEl.appendChild(tile);
   document.getElementById('file-' + f.key).addEventListener('change', e => handlePhoto(f.key, e));
 });
 
-/* compress via canvas: max 1600px long edge, JPEG q0.72 */
+/* compress via canvas: max 1280px long edge, JPEG q0.60 */
 function compressImage(file) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
-      const MAX = 1600;
       let { width, height } = img;
-      if (Math.max(width, height) > MAX) {
-        const s = MAX / Math.max(width, height);
+      if (Math.max(width, height) > MAX_EDGE) {
+        const s = MAX_EDGE / Math.max(width, height);
         width = Math.round(width * s);
         height = Math.round(height * s);
       }
@@ -425,30 +530,172 @@ function compressImage(file) {
       c.width = width; c.height = height;
       c.getContext('2d').drawImage(img, 0, 0, width, height);
       URL.revokeObjectURL(url);
-      const dataUrl = c.toDataURL('image/jpeg', 0.72);
-      resolve(dataUrl);
+      resolve(c.toDataURL('image/jpeg', JPEG_QUALITY));
     };
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('bad image')); };
     img.src = url;
   });
 }
 
+function setUploadStatus(key, status, msg) {
+  const el = document.getElementById('up-' + key);
+  const tile = document.getElementById('tile-' + key);
+  el.className = 'up-status ' + status;
+  tile.classList.toggle('done', status === 'done');
+  tile.classList.toggle('failed', status === 'failed');
+  if (status === 'working') {
+    el.innerHTML = '<span class="mini-spin"></span><span>' + msg + '</span>';
+  } else if (status === 'failed') {
+    el.innerHTML = '<span>✕ ' + msg + '</span><button class="retry-btn" onclick="uploadPhoto(\'' + key + '\')">Retry</button>';
+  } else if (status === 'done') {
+    el.innerHTML = '<span>✓ ' + msg + '</span>';
+  } else {
+    el.innerHTML = msg ? '<span>' + msg + '</span>' : '';
+  }
+  if (photoData[key]) photoData[key].status = status;
+  refreshSubmitState();
+  saveState();
+}
+
 async function handlePhoto(key, e) {
   const file = e.target.files[0];
   if (!file) return;
+
+  if (!submissionFolder) {
+    showToast('⚠️ Enter driver information first');
+    return;
+  }
+
+  const field = PHOTO_FIELDS.find(f => f.key === key);
   try {
     const dataUrl = await compressImage(file);
     const base64 = dataUrl.split(',')[1];
     const sizeKB = Math.round(base64.length * 0.75 / 1024);
-    photoData[key] = { base64, sizeKB };
+    const name = employeeNames[parseInt(idEl.value)] || '';
+    const filename = dateEl.value + '_' + name.replace(/[^A-Za-z0-9]/g,'') + '_' + key + '.jpg';
+
+    photoData[key] = { base64, sizeKB, filename, status: 'idle' };
+
     document.getElementById('thumb-' + key).src = dataUrl;
     document.getElementById('thumb-wrap-' + key).classList.add('show');
     document.getElementById('meta-' + key).textContent = sizeKB + ' KB · tap Take Photo to retake';
-    document.getElementById('tile-' + key).classList.add('done');
     document.getElementById('btn-label-' + key).textContent = '✓ Retake';
+
+    uploadPhoto(key);
   } catch (err) {
     showToast('⚠️ Could not read that photo. Please retake it.');
   }
+}
+
+/* Upload one photo. Retries automatically with backoff, then offers a manual Retry.
+   Filename is deterministic, so a repeat upload replaces rather than duplicates. */
+async function uploadPhoto(key, attempt) {
+  attempt = attempt || 0;
+  const p = photoData[key];
+  if (!p || !p.base64) { showToast('⚠️ Please retake that photo'); return; }
+
+  setUploadStatus(key, 'working', attempt ? 'Retrying upload (' + (attempt+1) + ' of 4)...' : 'Uploading...');
+
+  try {
+    const resp = await fetch(PHOTO_FLOW_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        folderName: submissionFolder,
+        filename: p.filename,
+        photoKey: key,
+        contentBase64: p.base64
+      })
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    setUploadStatus(key, 'done', 'Uploaded · ' + p.sizeKB + ' KB');
+  } catch (err) {
+    if (attempt < 3) {
+      const wait = 4000 * (attempt + 1);
+      setUploadStatus(key, 'working', 'Weak signal — retrying in ' + (wait/1000) + 's...');
+      setTimeout(() => uploadPhoto(key, attempt + 1), wait);
+    } else {
+      setUploadStatus(key, 'failed', 'Upload failed (' + err.message + ')');
+    }
+  }
+}
+
+function uploadedCount() {
+  return PHOTO_FIELDS.filter(f => photoData[f.key] && photoData[f.key].status === 'done').length;
+}
+
+function refreshSubmitState() {
+  const btn = document.getElementById('submit-btn');
+  const sum = document.getElementById('upload-summary');
+  if (submitting) return;
+  const total = PHOTO_FIELDS.filter(f => f.required).length;
+  const done = uploadedCount();
+  const ready = driverInfoComplete() && done === total;
+  btn.disabled = !ready;
+  if (!driverInfoComplete()) {
+    sum.textContent = 'Complete driver information to begin.';
+  } else if (done < total) {
+    sum.textContent = done + ' of ' + total + ' photos uploaded.';
+  } else {
+    sum.textContent = 'All photos uploaded. Ready to submit.';
+  }
+}
+
+/* ---------- state persistence ----------
+   Field values and per-photo upload status only. Image data stays in memory —
+   base64 for five photos exceeds the localStorage quota. Photos already uploaded
+   are safe on the server; any not yet uploaded must be retaken after a reload. */
+function saveState() {
+  try {
+    const st = {
+      name: nameEl.value,
+      empId: idEl.value,
+      date: dateEl.value,
+      trailer: trailerEl.value,
+      tractor: tractorEl.value,
+      folder: submissionFolder,
+      uploaded: PHOTO_FIELDS.filter(f => photoData[f.key] && photoData[f.key].status === 'done')
+                            .map(f => ({ key: f.key, filename: photoData[f.key].filename, sizeKB: photoData[f.key].sizeKB })),
+      savedAt: Date.now()
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(st));
+  } catch (e) { /* storage unavailable — not fatal */ }
+}
+
+function clearState() {
+  try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+}
+
+function restoreState() {
+  let st;
+  try { st = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null'); } catch (e) { return; }
+  if (!st || !st.folder) return;
+  // discard drafts older than 12 hours
+  if (Date.now() - (st.savedAt || 0) > 12 * 3600 * 1000) { clearState(); return; }
+
+  nameEl.value = st.name || '';
+  idEl.value = st.empId || '';
+  dateEl.value = st.date || dateEl.value;
+  trailerEl.value = st.trailer || '';
+  tractorEl.value = st.tractor || '';
+  submissionFolder = st.folder;
+  const nm = employeeNames[parseInt(idEl.value)];
+  if (nm) showId('ok', nm);
+
+  (st.uploaded || []).forEach(u => {
+    photoData[u.key] = { base64: null, sizeKB: u.sizeKB, filename: u.filename, status: 'done' };
+    setUploadStatus(u.key, 'done', 'Uploaded · ' + u.sizeKB + ' KB');
+    document.getElementById('btn-label-' + u.key).textContent = '✓ Retake';
+    document.getElementById('meta-' + u.key).textContent = u.sizeKB + ' KB · already uploaded';
+  });
+
+  onDriverInfoChange();
+
+  const remaining = PHOTO_FIELDS.filter(f => !photoData[f.key]).length;
+  const banner = document.getElementById('resume-banner');
+  banner.classList.add('show');
+  banner.textContent = remaining
+    ? 'Resumed your inspection. ' + (st.uploaded || []).length + ' photo(s) already uploaded — ' + remaining + ' still to take.'
+    : 'Resumed your inspection. All photos uploaded — tap Submit Verification to finish.';
 }
 
 /* ---------- date banner + default date ---------- */
@@ -460,7 +707,7 @@ function refreshClock(){
   document.getElementById('today-time').textContent = pad(now.getHours()%12||12)+':'+pad(now.getMinutes())+(now.getHours()<12?' AM':' PM');
 }
 refreshClock(); setInterval(refreshClock, 30000);
-document.getElementById('ver-date').value = new Date().toISOString().split('T')[0];
+dateEl.value = new Date().toISOString().split('T')[0];
 
 /* ---------- toast ---------- */
 function showToast(msg, duration=3200){
@@ -469,26 +716,30 @@ function showToast(msg, duration=3200){
   setTimeout(()=>t.classList.remove('show'), duration);
 }
 
-/* ---------- submit ---------- */
+/* ---------- submit ----------
+   Photos are already in SharePoint. This posts only the log record —
+   a few hundred bytes, so it completes even on a marginal connection. */
 async function submitForm(){
   const btn = document.getElementById('submit-btn');
-  if (btn.disabled) return;
+  if (btn.disabled || submitting) return;
 
   const empId = idEl.value.trim();
   const name = employeeNames[parseInt(empId)] || '';
-  const date = document.getElementById('ver-date').value;
-  const trailerNum = document.getElementById('trailer-num').value.trim();
-  const tractorNum = document.getElementById('tractor-num').value.trim();
+  const date = dateEl.value;
+  const trailerNum = trailerEl.value.trim();
+  const tractorNum = tractorEl.value.trim();
 
   if (!name)      { showToast('⚠️ Select your name or enter a valid Employee ID'); return; }
   if (!date)      { showToast('⚠️ Please select the date'); return; }
   if (!trailerNum){ showToast('⚠️ Please enter the trailer number'); return; }
   if (!tractorNum){ showToast('⚠️ Please enter the tractor number'); return; }
-  const missing = PHOTO_FIELDS.filter(f => f.required && !photoData[f.key]);
-  if (missing.length){ showToast('⚠️ Missing photo: ' + missing[0].title); return; }
 
+  const pending = PHOTO_FIELDS.filter(f => f.required && (!photoData[f.key] || photoData[f.key].status !== 'done'));
+  if (pending.length) { showToast('⚠️ Still uploading: ' + pending[0].title); return; }
+
+  submitting = true;
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span>Uploading photos...';
+  btn.innerHTML = '<span class="spinner"></span>Submitting...';
 
   const payload = {
     employeeId: parseInt(empId),
@@ -497,53 +748,75 @@ async function submitForm(){
     trailerNum: trailerNum,
     tractorNum: tractorNum,
     submittedAt: new Date().toISOString(),
-    photos: PHOTO_FIELDS.filter(f => photoData[f.key]).map(f => ({
-      field: f.key,
-      filename: date + '_' + name.replace(/[^A-Za-z0-9]/g,'') + '_' + f.key + '.jpg',
-      contentBase64: photoData[f.key].base64
-    }))
+    folderName: submissionFolder,
+    photoCount: uploadedCount()
   };
 
-  try {
-    // No Content-Type header: keeps this a 'simple request' so the browser
-    // skips the CORS preflight that the powerplatform.com URL rejects.
-    const resp = await fetch(FLOW_URL, {
-      method: 'POST',
-      body: JSON.stringify(payload)
-    });
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+  let ok = false;
+  for (let attempt = 0; attempt < 3 && !ok; attempt++) {
+    try {
+      // No Content-Type header: keeps this a 'simple request' so the browser
+      // skips the CORS preflight that the powerplatform.com URL rejects.
+      const resp = await fetch(FLOW_URL, { method: 'POST', body: JSON.stringify(payload) });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      ok = true;
+    } catch (err) {
+      if (attempt < 2) {
+        btn.innerHTML = '<span class="spinner"></span>Weak signal — retrying...';
+        await new Promise(r => setTimeout(r, 4000 * (attempt + 1)));
+      }
+    }
+  }
+
+  submitting = false;
+
+  if (ok) {
+    clearState();
     document.getElementById('success-detail').textContent =
-      name + ' · Trailer ' + trailerNum + ' · ' + payload.photos.length + ' photos logged.';
+      name + ' · Trailer ' + trailerNum + ' · ' + payload.photoCount + ' photos logged.';
     document.getElementById('form-section').style.display = 'none';
+    document.getElementById('resume-banner').classList.remove('show');
     document.getElementById('success-section').classList.add('show');
     window.scrollTo(0,0);
-  } catch (err) {
-    showToast('❌ Submission failed. Check signal and try again.');
+  } else {
+    showToast('❌ Could not save the record. Your photos are already uploaded — tap Submit again.');
     btn.disabled = false;
     btn.innerHTML = 'Submit Verification';
+    refreshSubmitState();
   }
 }
 
 function resetForm(){
   nameEl.value = ''; idEl.value = '';
   resEl.className = 'id-result';
-  document.getElementById('trailer-num').value = '';
-  document.getElementById('tractor-num').value = '';
-  document.getElementById('ver-date').value = new Date().toISOString().split('T')[0];
+  trailerEl.value = '';
+  tractorEl.value = '';
+  dateEl.value = new Date().toISOString().split('T')[0];
+  submissionFolder = null;
+  submitting = false;
+  clearState();
+
   PHOTO_FIELDS.forEach(f => {
     delete photoData[f.key];
-    document.getElementById('tile-' + f.key).classList.remove('done');
+    const tile = document.getElementById('tile-' + f.key);
+    tile.classList.remove('done','failed');
     document.getElementById('thumb-wrap-' + f.key).classList.remove('show');
     document.getElementById('file-' + f.key).value = '';
     document.getElementById('btn-label-' + f.key).textContent = '📷 Take Photo';
+    document.getElementById('up-' + f.key).className = 'up-status idle';
+    document.getElementById('up-' + f.key).innerHTML = '';
+    document.getElementById('meta-' + f.key).textContent = '';
   });
+
   const btn = document.getElementById('submit-btn');
-  btn.disabled = false; btn.innerHTML = 'Submit Verification';
+  btn.innerHTML = 'Submit Verification';
+  document.getElementById('resume-banner').classList.remove('show');
   document.getElementById('success-section').classList.remove('show');
   document.getElementById('form-section').style.display = 'block';
+  onDriverInfoChange();
 }
 
-/* ---------- QR ---------- */
+/* ---------- init ---------- */
 window.addEventListener('load', () => {
   const url = window.location.href;
   document.getElementById('qr-url-text').textContent = url;
@@ -552,6 +825,8 @@ window.addEventListener('load', () => {
     colorDark: '#000000', colorLight: '#ffffff',
     correctLevel: QRCode.CorrectLevel.H
   });
+  restoreState();
+  onDriverInfoChange();
 });
 </script>
 </body>
