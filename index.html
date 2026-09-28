@@ -111,6 +111,7 @@
   }
   .photo-tile.done { border: 1px solid var(--green); }
   .photo-tile.failed { border: 1px solid var(--red); }
+  .photo-tile.unconfirmed { border: 1px solid var(--amber); }
   .photo-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .photo-title { font-size: 14px; font-weight: 600; }
   .photo-title .req { color: var(--red); }
@@ -126,10 +127,12 @@
   .thumb-wrap img { width: 100%; max-height: 220px; object-fit: cover; border-radius: 8px; }
   .thumb-meta { font-size: 12px; color: var(--muted); margin-top: 5px; }
 
-  .up-status { display: flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; margin-top: 6px; }
+  .up-status { display: flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; margin-top: 6px; flex-wrap: wrap; }
   .up-status.idle    { color: var(--muted); }
+  .up-status.queued  { color: var(--muted); }
   .up-status.working { color: var(--blue); }
   .up-status.done    { color: var(--green); }
+  .up-status.unconfirmed { color: #9A6B00; }
   .up-status.failed  { color: var(--red); }
   .mini-spin {
     width: 12px; height: 12px; border: 2px solid rgba(52,152,219,0.3);
@@ -141,6 +144,7 @@
     padding: 5px 10px; font-family: 'Barlow', sans-serif; font-weight: 600; font-size: 12px;
     cursor: pointer; margin-left: 4px;
   }
+  .retry-btn.amber { background: var(--amber); color: #1A1A1A; }
   input[type="file"] { display: none; }
 
   /* SUBMIT */
@@ -328,6 +332,12 @@ const PHOTO_FLOW_URL = 'https://default3736ba2ab66047748ed80d95976bac.33.environ
 const MAX_EDGE = 1280;
 const JPEG_QUALITY = 0.60;
 
+/* Hard ceilings on every request. Without these a stalled connection leaves the
+   spinner running forever: the promise never settles, so the retry never fires.
+   Flow run history shows the flow itself finishes in 1-2 seconds. */
+const UPLOAD_TIMEOUT_MS = 45000;
+const SUBMIT_TIMEOUT_MS = 30000;
+
 const STORAGE_KEY = 'fw_draft_v2';
 
 /* Photo requirements — key becomes the SharePoint filename prefix */
@@ -412,12 +422,26 @@ const employeeNames = {
 };
 
 /* ---------- state ---------- */
-/* photoData[key] = { base64, sizeKB, filename, status } 
-   status: 'idle' | 'working' | 'done' | 'failed'
+/* photoData[key] = { base64, sizeKB, filename, status }
+   status: 'idle' | 'queued' | 'working' | 'done' | 'unconfirmed' | 'failed'
    base64 is held in memory only — never written to localStorage (too large). */
 const photoData = {};
 let submissionFolder = null;   // set once driver info is complete
 let submitting = false;
+
+/* One upload at a time. Run history showed three uploads starting in the same
+   second, with one losing its response. Queueing keeps the "upload as you shoot"
+   behaviour but stops the requests overlapping. */
+let uploadQueue = Promise.resolve();
+const inFlight = {};
+
+/* fetch with a hard timeout. Returns the response, or throws. */
+function fetchWithTimeout(url, options, ms) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, Object.assign({}, options, { signal: ctrl.signal }))
+    .finally(() => clearTimeout(timer));
+}
 
 /* ---------- roster search wiring ---------- */
 const nameToId = {};
@@ -548,10 +572,13 @@ function setUploadStatus(key, status, msg) {
   el.className = 'up-status ' + status;
   tile.classList.toggle('done', status === 'done');
   tile.classList.toggle('failed', status === 'failed');
+  tile.classList.toggle('unconfirmed', status === 'unconfirmed');
   if (status === 'working') {
     el.innerHTML = '<span class="mini-spin"></span><span>' + msg + '</span>';
   } else if (status === 'failed') {
     el.innerHTML = '<span>✕ ' + msg + '</span><button class="retry-btn" onclick="uploadPhoto(\'' + key + '\')">Retry</button>';
+  } else if (status === 'unconfirmed') {
+    el.innerHTML = '<span>⚠ ' + msg + '</span><button class="retry-btn amber" onclick="uploadPhoto(\'' + key + '\')">Retry</button>';
   } else if (status === 'done') {
     el.innerHTML = '<span>✓ ' + msg + '</span>';
   } else {
@@ -592,17 +619,31 @@ async function handlePhoto(key, e) {
   }
 }
 
-/* Upload one photo. Retries automatically with backoff, then offers a manual Retry.
-   Filename is deterministic, so a repeat upload replaces rather than duplicates. */
-async function uploadPhoto(key, attempt) {
-  attempt = attempt || 0;
+/* Queue an upload. Photos still upload as they are taken, but only one request
+   is in the air at a time. */
+function uploadPhoto(key) {
   const p = photoData[key];
   if (!p || !p.base64) { showToast('⚠️ Please retake that photo'); return; }
+  if (inFlight[key]) return;            // already uploading or waiting
+  inFlight[key] = true;
+  setUploadStatus(key, 'queued', 'Waiting to upload...');
+  uploadQueue = uploadQueue
+    .then(() => runUpload(key))
+    .catch(() => {})
+    .finally(() => { inFlight[key] = false; });
+}
+
+/* Upload one photo. Retries with backoff, then marks it sent-but-unconfirmed.
+   Filename is deterministic, so a repeat upload replaces rather than duplicates. */
+async function runUpload(key, attempt) {
+  attempt = attempt || 0;
+  const p = photoData[key];
+  if (!p || !p.base64) return;
 
   setUploadStatus(key, 'working', attempt ? 'Retrying upload (' + (attempt+1) + ' of 4)...' : 'Uploading...');
 
   try {
-    const resp = await fetch(PHOTO_FLOW_URL, {
+    const resp = await fetchWithTimeout(PHOTO_FLOW_URL, {
       method: 'POST',
       body: JSON.stringify({
         folderName: submissionFolder,
@@ -610,23 +651,30 @@ async function uploadPhoto(key, attempt) {
         photoKey: key,
         contentBase64: p.base64
       })
-    });
+    }, UPLOAD_TIMEOUT_MS);
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     setUploadStatus(key, 'done', 'Uploaded · ' + p.sizeKB + ' KB');
   } catch (err) {
     if (attempt < 3) {
       const wait = 4000 * (attempt + 1);
       setUploadStatus(key, 'working', 'Weak signal — retrying in ' + (wait/1000) + 's...');
-      setTimeout(() => uploadPhoto(key, attempt + 1), wait);
-    } else {
-      setUploadStatus(key, 'failed', 'Upload failed (' + err.message + ')');
+      await new Promise(r => setTimeout(r, wait));
+      return runUpload(key, attempt + 1);
     }
+    /* The photo is very likely on the server: the flow writes the file before it
+       replies, so a lost reply does not mean a lost photo. Let the driver finish
+       and flag it rather than blocking the verification. */
+    setUploadStatus(key, 'unconfirmed', 'Sent · not confirmed');
   }
 }
 
 function uploadedCount() {
   return PHOTO_FIELDS.filter(f => photoData[f.key] && photoData[f.key].status === 'done').length;
 }
+function unconfirmedCount() {
+  return PHOTO_FIELDS.filter(f => photoData[f.key] && photoData[f.key].status === 'unconfirmed').length;
+}
+function sentCount() { return uploadedCount() + unconfirmedCount(); }
 
 function refreshSubmitState() {
   const btn = document.getElementById('submit-btn');
@@ -634,12 +682,15 @@ function refreshSubmitState() {
   if (submitting) return;
   const total = PHOTO_FIELDS.filter(f => f.required).length;
   const done = uploadedCount();
-  const ready = driverInfoComplete() && done === total;
+  const unconf = unconfirmedCount();
+  const ready = driverInfoComplete() && (done + unconf) === total;
   btn.disabled = !ready;
   if (!driverInfoComplete()) {
     sum.textContent = 'Complete driver information to begin.';
-  } else if (done < total) {
-    sum.textContent = done + ' of ' + total + ' photos uploaded.';
+  } else if (done + unconf < total) {
+    sum.textContent = (done + unconf) + ' of ' + total + ' photos uploaded.';
+  } else if (unconf) {
+    sum.textContent = 'All photos sent. ' + unconf + ' could not be confirmed — you can still submit.';
   } else {
     sum.textContent = 'All photos uploaded. Ready to submit.';
   }
@@ -658,8 +709,9 @@ function saveState() {
       trailer: trailerEl.value,
       tractor: tractorEl.value,
       folder: submissionFolder,
-      uploaded: PHOTO_FIELDS.filter(f => photoData[f.key] && photoData[f.key].status === 'done')
-                            .map(f => ({ key: f.key, filename: photoData[f.key].filename, sizeKB: photoData[f.key].sizeKB })),
+      uploaded: PHOTO_FIELDS
+        .filter(f => photoData[f.key] && (photoData[f.key].status === 'done' || photoData[f.key].status === 'unconfirmed'))
+        .map(f => ({ key: f.key, filename: photoData[f.key].filename, sizeKB: photoData[f.key].sizeKB, status: photoData[f.key].status })),
       savedAt: Date.now()
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(st));
@@ -687,8 +739,9 @@ function restoreState() {
   if (nm) showId('ok', nm);
 
   (st.uploaded || []).forEach(u => {
-    photoData[u.key] = { base64: null, sizeKB: u.sizeKB, filename: u.filename, status: 'done' };
-    setUploadStatus(u.key, 'done', 'Uploaded · ' + u.sizeKB + ' KB');
+    const status = u.status === 'unconfirmed' ? 'unconfirmed' : 'done';
+    photoData[u.key] = { base64: null, sizeKB: u.sizeKB, filename: u.filename, status: status };
+    setUploadStatus(u.key, status, status === 'done' ? 'Uploaded · ' + u.sizeKB + ' KB' : 'Sent · not confirmed');
     document.getElementById('btn-label-' + u.key).textContent = '✓ Retake';
     document.getElementById('meta-' + u.key).textContent = u.sizeKB + ' KB · already uploaded';
   });
@@ -739,7 +792,8 @@ async function submitForm(){
   if (!trailerNum){ showToast('⚠️ Please enter the trailer number'); return; }
   if (!tractorNum){ showToast('⚠️ Please enter the tractor number'); return; }
 
-  const pending = PHOTO_FIELDS.filter(f => f.required && (!photoData[f.key] || photoData[f.key].status !== 'done'));
+  const pending = PHOTO_FIELDS.filter(f => f.required && (!photoData[f.key] ||
+    (photoData[f.key].status !== 'done' && photoData[f.key].status !== 'unconfirmed')));
   if (pending.length) { showToast('⚠️ Still uploading: ' + pending[0].title); return; }
 
   submitting = true;
@@ -754,7 +808,11 @@ async function submitForm(){
     tractorNum: tractorNum,
     submittedAt: new Date().toISOString(),
     folderName: submissionFolder,
-    photoCount: uploadedCount()
+    photoCount: sentCount(),
+    photosUnconfirmed: PHOTO_FIELDS
+      .filter(f => photoData[f.key] && photoData[f.key].status === 'unconfirmed')
+      .map(f => f.title)
+      .join(', ')
   };
 
   let ok = false;
@@ -762,7 +820,7 @@ async function submitForm(){
     try {
       // No Content-Type header: keeps this a 'simple request' so the browser
       // skips the CORS preflight that the powerplatform.com URL rejects.
-      const resp = await fetch(FLOW_URL, { method: 'POST', body: JSON.stringify(payload) });
+      const resp = await fetchWithTimeout(FLOW_URL, { method: 'POST', body: JSON.stringify(payload) }, SUBMIT_TIMEOUT_MS);
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       ok = true;
     } catch (err) {
@@ -776,9 +834,11 @@ async function submitForm(){
   submitting = false;
 
   if (ok) {
+    const unconf = unconfirmedCount();
     clearState();
     document.getElementById('success-detail').textContent =
-      name + ' · Trailer ' + trailerNum + ' · ' + payload.photoCount + ' photos logged.';
+      name + ' · Trailer ' + trailerNum + ' · ' + payload.photoCount + ' photos logged.' +
+      (unconf ? ' ' + unconf + ' photo(s) could not be confirmed — tell your supervisor.' : '');
     document.getElementById('form-section').style.display = 'none';
     document.getElementById('resume-banner').classList.remove('show');
     document.getElementById('success-section').classList.add('show');
@@ -799,12 +859,14 @@ function resetForm(){
   dateEl.value = new Date().toISOString().split('T')[0];
   submissionFolder = null;
   submitting = false;
+  uploadQueue = Promise.resolve();
   clearState();
 
   PHOTO_FIELDS.forEach(f => {
     delete photoData[f.key];
+    delete inFlight[f.key];
     const tile = document.getElementById('tile-' + f.key);
-    tile.classList.remove('done','failed');
+    tile.classList.remove('done','failed','unconfirmed');
     document.getElementById('thumb-wrap-' + f.key).classList.remove('show');
     document.getElementById('file-' + f.key).value = '';
     document.getElementById('btn-label-' + f.key).textContent = '📷 Take Photo';
